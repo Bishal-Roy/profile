@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/userSchema");
+const bcrypt = require("bcryptjs");
+const generateToken = require("../utils/generateToken");
 
 router.post("/register", async (req, res) => {
   const { name, email, phone, work, password, cpassword } = req.body;
@@ -15,7 +17,7 @@ router.post("/register", async (req, res) => {
     } else if (password != cpassword) {
       return res.status(400).json({ error: "enter right confirm password" });
     } else {
-      const user = new User({ name, email, phone, work, password});
+      const user = new User({ name, email, phone, work, password });
       await user.save();
       res.status(200).json({ message: "successfully registered" });
     }
@@ -23,6 +25,7 @@ router.post("/register", async (req, res) => {
     console.log(error);
   }
 });
+
 router.post("/signin", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -31,14 +34,24 @@ router.post("/signin", async (req, res) => {
       .json({ error: "please enter your email and password" });
   }
   try {
-    const emailexists = await User.findOne({ email });
-    if (!emailexists) {
-      return res.status(400).json({ error: "invalid entry" });
+    let token;
+    const userFound = await User.findOne({ email });
+    if (!userFound) {
+      return res.status(400).json({ error: "invalid email or password" });
     } else {
-      res.json({ emailexists });
+      const match = await bcrypt.compare(password, userFound.password);
+      if (match) {
+       token =await generateToken(userFound._id);
+        userFound.tokens = userFound.tokens.concat({token});
+        await userFound.save();
+        res.cookie("jwt-token", token);
+        res.send("successfully login");
+      } else {
+        res.status(400).send("failed to login");
+      }
     }
   } catch (error) {
-    console.log("error");
+    console.log(error);
   }
 });
 
